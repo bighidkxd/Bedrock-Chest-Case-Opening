@@ -30,39 +30,39 @@ import net.minecraft.scoreboard.Scoreboard;
 import net.minecraft.util.ChatComponentText;
 
 public class ChestListener {
-	
-	private static WorldClient lastWorld = null;
-	
-	public static boolean hasPlayedAnimation = false;
-	
-	private boolean isCroesus = false;
-	private boolean isCatacombsChestList = false;
-	private int chestID;
-	
-	Map<Integer, Boolean> crOpenedChestOb = new HashMap<>();
-	Map<Integer, Boolean> crOpenedChestBr = new HashMap<>();
-	private boolean openedChestOb = false;
-	private boolean openedChestBr = false;
-	
-	
-	private Floor curFloor;
-	private CaseMaterial curMaterial;
-	
-	public static GuiChest originalGui;
-	
+
+    private static WorldClient lastWorld = null;
+
+    public static boolean hasPlayedAnimation = false;
+
+    private boolean isCroesus = false;
+    private boolean isCatacombsChestList = false;
+    private int chestID;
+
+    Map<Integer, Boolean> crOpenedChestOb = new HashMap<>();
+    Map<Integer, Boolean> crOpenedChestBr = new HashMap<>();
+    private boolean openedChestOb = false;
+    private boolean openedChestBr = false;
+
+
+    private Floor curFloor;
+    private CaseMaterial curMaterial;
+
+    public static GuiChest originalGui;
+
     @SubscribeEvent
-    public void onGuiOpen(GuiOpenEvent event) {    	
+    public void onGuiOpen(GuiOpenEvent event) {
         if (event.gui instanceof GuiChest) {
             originalGui = (GuiChest) event.gui;
 
-            if (originalGui.inventorySlots instanceof ContainerChest) {    
-            	
+            if (originalGui.inventorySlots instanceof ContainerChest) {
+
                 ContainerChest container = (ContainerChest) originalGui.inventorySlots;
                 IInventory lower = container.getLowerChestInventory();
-                
+
                 if (lower.hasCustomName()) {
                     String name = lower.getDisplayName().getUnformattedText();
-                    
+
                     if (name.endsWith(" Chest")) {
                         String materialName = name.substring(0, name.length() - " Chest".length()).trim();
                         CaseMaterial parsedMaterial = null;
@@ -75,118 +75,77 @@ public class ChestListener {
                         }
 
                         if (isCroesus) {
-                        	if (curMaterial == CaseMaterial.BEDROCK) {
+                            if (curMaterial == CaseMaterial.BEDROCK) {
                                 if (crOpenedChestBr.containsKey(chestID)) return;
                                 crOpenedChestBr.put(chestID, true);
-                        	}
-                        	if (curMaterial == CaseMaterial.OBSIDIAN) {
+                            }
+                            if (curMaterial == CaseMaterial.OBSIDIAN) {
                                 if (crOpenedChestOb.containsKey(chestID)) return;
                                 crOpenedChestOb.put(chestID, true);
-                        	}
+                            }
                         } else {
-                        	if (MyConfig.debugMode)
-                        	    Minecraft.getMinecraft().thePlayer.addChatMessage(
-                        	            new ChatComponentText("Not Croesus, Searching scoreboard"));
+                            if (MyConfig.debugMode)
+                                Minecraft.getMinecraft().thePlayer.addChatMessage(
+                                        new ChatComponentText("Not Croesus, Searching scoreboard"));
 
-                        	Scoreboard sb = Minecraft.getMinecraft().theWorld.getScoreboard();
-                        	ScoreObjective sidebar = sb.getObjectiveInDisplaySlot(1);
+                            Scoreboard sb = Minecraft.getMinecraft().theWorld.getScoreboard();
+                            if (sb == null) return;
 
-                        	if (sidebar != null) {
-                        	    Collection<Score> scores = sb.getSortedScores(sidebar);
+                            ScoreObjective sidebar = sb.getObjectiveInDisplaySlot(1);
+                            if (sidebar == null) return;
 
-                        	    for (Score sc : scores) {
-                        	        ScorePlayerTeam team = sb.getPlayersTeam(sc.getPlayerName());
-                        	        String line = ScorePlayerTeam.formatPlayerName(team, sc.getPlayerName());
+                            Collection<Score> scores = sb.getSortedScores(sidebar);
 
-                        	        line = clean(line);
-                        	        
-                        	        if (MyConfig.debugMode) System.out.println(line);
+                            for (Score sc : scores) {
+                                if (sc == null || sc.getPlayerName() == null) continue;
 
-                        	        if (MyConfig.debugMode)
-                        	            Minecraft.getMinecraft().thePlayer.addChatMessage(new ChatComponentText(line));
+                                String raw = sc.getPlayerName();
 
-                        	        if (line.contains("The Catacombs (")) {
-                        	            Matcher m = Pattern.compile("\\((.*?)\\)").matcher(line);
+                                if (raw.startsWith(" §7⏣ §cThe Catacombs §7")) {
 
-                        	            if (m.find()) {
-                        	                String floorId = m.group(1).trim();
-                        	                boolean isMaster = floorId.startsWith("M");
-                        	                int num = Integer.parseInt(floorId.substring(1));
+                                    int open = raw.indexOf('(');
+                                    int close = raw.indexOf(')', open + 1);
 
-                        	                String[] roman = {"I","II","III","IV","V","VI","VII"};
-                        	                if (num >= 1 && num <= 7)
-                        	                    floorId = (isMaster ? "M" : "") + roman[num - 1];
+                                    if (open >= 0 && close > open) {
+                                        String floorId = raw.substring(open + 1, close).trim();
 
-                        	                try {
-                        	                    curFloor = DungeonDropData.Floor.valueOf(floorId);
-                        	                } catch (Exception ignored) {}
-                        	            }
-                        	            break;
-                        	        }
-                        	    }
-                        	    
-                        	    if (curMaterial == CaseMaterial.BEDROCK)
-                        	    	if (!openedChestBr) openedChestBr = true; else return;
-                        	    if (curMaterial == CaseMaterial.OBSIDIAN)
-                        	    	if (!openedChestOb) openedChestOb = true; else return;
-                        	}
-                        }
-                        
-                        if (MyConfig.debugMode)
-                            Minecraft.getMinecraft().thePlayer.addChatMessage(
-                                    new ChatComponentText("Material = " + curMaterial + " , Floor = " + curFloor));
-                        event.gui = new GuiInterceptChest(container, curFloor, curMaterial);
-                        if (MyConfig.debugMode) System.out.println("gui intercept called");
-                    }
-
-                    
-                    if (name.contains("Catacombs")) {
-                        boolean isMasterMode = name.contains("Master Mode");
-                        Floor curFloor = null;
-                        String prefix = isMasterMode ? "M" : "";
-
-                        String[] roman = {"I","II","III","IV","V","VI","VII"};
-                        for (String p : name.split(" ")) {
-                            for (int i = 0; i < roman.length; i++) {
-                                if (p.equalsIgnoreCase(roman[i])) {
-                                    Floor base = Floor.values()[i]; 
-                                    if (isMasterMode) {
-                                        curFloor = Floor.valueOf(prefix + base.name());
-                                    } else {
-                                        curFloor = base;
+                                        try {
+                                            curFloor = Floor.valueOf(floorId);
+                                        } catch (IllegalArgumentException ignored) {}
                                     }
+
                                     break;
                                 }
                             }
-                            if (curFloor != null) break;
+                            if (curFloor != null);
                         }
 
                         if (MyConfig.debugMode) {
                             Minecraft.getMinecraft().thePlayer.addChatMessage(
-                                new ChatComponentText("Detected floor: " + curFloor));
+                                    new ChatComponentText("Detected floor: " + curFloor));
                         }
-                        
+
                         if (!isCroesus) return;
 
                         if (MyConfig.debugMode)
                             Minecraft.getMinecraft().thePlayer.addChatMessage(
-                                new ChatComponentText(chestID + " Haven't opened yet"));
+                                    new ChatComponentText(chestID + " Haven't opened yet"));
 
-                        isCatacombsChestList = true;     
+                        isCatacombsChestList = true;
                         this.curFloor = curFloor;
                     }
                 }
 
-                
+
                 if (lower.hasCustomName() && lower.getDisplayName().getUnformattedText().contains("Croesus")) {
-                	if(MyConfig.debugMode) Minecraft.getMinecraft().thePlayer.addChatMessage(new ChatComponentText("Croesus"));   
-                	isCroesus = true;
-                	isCatacombsChestList = false;
+                    if(MyConfig.debugMode) Minecraft.getMinecraft().thePlayer.addChatMessage(new ChatComponentText("Croesus"));
+                    isCroesus = true;
+                    isCatacombsChestList = false;
                 }
             }
         }
     }
-    
+
     @SubscribeEvent
     public void onItemTooltip(ItemTooltipEvent event) {
         if (Minecraft.getMinecraft().currentScreen instanceof GuiChest && isCatacombsChestList) {
@@ -208,21 +167,21 @@ public class ChestListener {
             }
         }
     }
-    
+
     @SubscribeEvent
     public void onMouseClick(GuiScreenEvent.MouseInputEvent.Pre event) {
         if (event.gui instanceof GuiChest) {
             GuiChest chest = (GuiChest) event.gui;
-            
+
             Slot slot = chest.getSlotUnderMouse();
             if (slot != null && org.lwjgl.input.Mouse.getEventButtonState()) {
-                
+
                 if(isCroesus && !isCatacombsChestList) chestID = slot.slotNumber;
             }
         }
     }
 
-    
+
     @SubscribeEvent
     public void onClientTick(TickEvent.ClientTickEvent event) {
         if (event.phase != TickEvent.Phase.END) return;
@@ -234,14 +193,14 @@ public class ChestListener {
             isCroesus = false;
             hasPlayedAnimation = false;
             chestID = -1;
-            
+
             openedChestOb = false;
             openedChestBr = false;
             crOpenedChestOb.clear();
             crOpenedChestBr.clear();
         }
     }
-    
+
     private static String clean(String s) {
         StringBuilder sb = new StringBuilder();
 
@@ -261,4 +220,3 @@ public class ChestListener {
         return sb.toString();
     }
 }
- 
